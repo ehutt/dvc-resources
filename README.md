@@ -1,19 +1,4 @@
-# dvc-resources
-
 # Data Version Control (DVC) 
-
-In this tutorial, we cover: 
-1. DVC basics 
-3. How to build and use a data registry 
-4. How to work on an existing DVC project 
-5. How to conduct ML experiments using DVC 
-
-This tutorial assumes familiarity with dvc's basic usage, so if you're not there yet I highly recommend you check out 
-their [documentation](https://dvc.org/doc/home) and their [introductory tutorial.](https://dvc.org/doc/tutorials/get-started/agenda) 
-No need for me to paraphrase - they have done a phenomenal job with their documentation. 
-
-
-## The Basics 
 
 DVC is an open-source development tool designed with data science and machine learning practitioners in mind. Unlike a traditional software 
 development workflow, machine learning often involves a multi-step cycle of data processing, compute-intensive model training, 
@@ -28,23 +13,27 @@ I could go on and on about how game-changing DVC has been, so here are just a fe
 * efficient data and model management eliminates the need for repeated steps and makes them easy to share
 * ability to conduct ML experiments such that results are completely reproducible and metrics are easily compared across different 
 versions of a pipeline via git tags and branches
-* all-in-one solution - in searching for ways to optimize my ML workflow, I looked at other options like MLFlow and AWS Sagemaker, 
+* all-in-one solution - in searching for ways to optimize my ML workflow, I looked at other options like MLFlow, Tensorboard and AWS Sagemaker, 
 but none of them were as intuitive or as complete as DVC is. 
 
-DVC Resources: 
-* [Github](https://github.com/iterative/dvc) 
-* [documentation]
-* [Introductory Tutorial](https://dvc.org/doc/tutorials/get-started/agenda)
+In this tutorial, we cover: 
+
+3. How to build and use a data registry 
+5. How to conduct  experiments using DVC 
+
+This tutorial assumes familiarity with dvc's basic usage, so if you're not there yet I highly recommend you check out 
+their [documentation](https://dvc.org/doc/home) and this [introductory tutorial.](https://dvc.org/doc/tutorials/get-started/agenda) 
+No need for me to paraphrase - they have done a phenomenal job explaining how it works. 
 
 
 ## How Build and Use a Data Registry 
 
 ### What is a data registry? 
-A data registry is simply a DVC project dedicated to the storage and tracking of data and/or models. It provides an interface 
-to your remote storage system of choice, through which you can use and update large data files in a reproducible manner. 
-There are several notable advantages of using such a system, best explained by the dvc makers themselves:
+A data registry is simply a DVC project dedicated to the storage and tracking of data and/or models. To keep it simple, I like to have one for data 
+and one for models. The registry provides an interface to your remote storage system of choice, through which you can use and update 
+large data files in a carefully tracked and versioned manner. There are several notable advantages of using such a system, best explained by the dvc makers themselves:
 
-![alt text](https://github.com/ehutt/dvc-resources/images/dataregistry.png)
+![alt text](images/dataregistry.png)
 
 I will be using AWS S3 for the remote storage in this tutorial since that is what we use on my team, but the principles are the same
 whether you are using local storage, GCP, SSH, etc. For a complete list of supported remote storage types, see [here](https://dvc.org/doc/command-reference/remote/add)
@@ -99,7 +88,10 @@ Now I want to add some raw audio data to my dvc data registry, a file called `re
     git add . && git commit -m "push recording data to s3" && git push 
     ```
 
-
+If you go look at the datasets bucket, you will find a bunch of random folders with a few files each - when you push data 
+to your remote, dvc stores them in a content-addressable way. As such, you don't have to worry about duplication. The lack of 
+human-readability here also means that you must rely on your neatly organized data registry for pulling/pushing data to the cloud, 
+preventing any accidental deletions or changes and essentially forcing everyone on the team to use dvc :)  
 
 ### Using Data from the Registry 
 
@@ -156,12 +148,127 @@ to the registry repo and called `dvc add` again. Now the data registry looks som
     │       ├──recording.txt     
     ```
 
-Other tips and tricks for using a data registry 
+### Data Registry Tips and Tricks 
 
 * To make sure you have the latest version of an imported dataset, run `dvc update` to pull any changes from 
 * In the situation where you want to modify a raw dataset and store the result in your data registry, it is also possible 
 to perform the steps from within the registry repo itself. In mine, I have a folder to store code so that when I do any data processing 
-(e.g. take some raw text and remove html artifacts), I can maintain the dependencies using `dvc run`
-
-
+(e.g. take some raw text and remove html artifacts), I can maintain the dependencies using `dvc run`, without having to 
+perform the above steps of copying outputs from another project into the registry and using `dvc add`, since this stops the 
+dvc-tracked trail of dependencies. 
 * I like to store all my dvc stage files in a dedicated folder called `dvc_files` to avoid cluttering the project repo. 
+
+## How to Conduct Machine Learning Experiments Using DVC 
+
+Let's run a toy experiment to compare the performance of two question-answering models. Suppose we have a labeled dataset
+a la [SQuad2.0](https://rajpurkar.github.io/SQuAD-explorer/), with some paragraphs and corresponding question, answer pairs. 
+We have two pre-trained models from Hugging Face transformers, `distilbert-base-uncased` and `albert-base-v2-uncased`, 
+which have been fine-tuned for question answering and we want to compare them across two metrics: F1 and inference speed. 
+In our dvc project, we have some model checkpoints, an evaluation script that outputs these scores, and a config file 
+that specifies parameters for the evaluation, including which model should be used. 
+
+First, make sure you are somewhat familiar with the following cool dvc features: 
+* [`dvc params`](https://dvc.org/doc/command-reference/params) for assigning parameters to pipeline stages
+* [`dvc metrics`](https://dvc.org/doc/command-reference/metrics) for specifying outputs that you want to track as metrics 
+
+Steps: 
+1. First, let's make a new branch off of master for our experiment 
+
+    `git checkout -b qa-experiment`
+
+2. Let's make a directory to store the results of our experiment and the annotated data. 
+    
+    ``` 
+    mkdir results 
+    mkdir data 
+    ```
+    
+3. Import the annotated data from our handy data registry. 
+
+    ``` 
+    dvc import https://github.com/ehutt/sample-data-registry \
+    text/annotations/qa.json 
+    mv qa.json data
+    ```
+4. Take a look at the config file, `params.yaml`. The evaluation script will read from this file to load the specified 
+model checkpoints and other arguments for running model inference. 
+    ``` 
+    model: 
+        path: models/distilbert
+    args:
+        max_answer_length: 30
+        topk: 1
+    ```
+5. Create a dvc pipeline stage for performing evaluation, using the `-p` flag to specify which parameters are used 
+and the `-M` to specify that the output is a metric. 
+    ```
+    eval_data=data/qa.json
+   
+    dvc run -f evaluate.dvc \
+    -d evaluate.py \
+    -d $eval_data \
+    -p model, args \
+    -M results/scores.json \
+    python evaluate.py $eval_data results
+   ```
+4. Commit and tag the results, adding a short description with the model version and task mentioned.
+
+    ``` 
+    git add . && git commit -m "evaluate distilbert qa"
+    git tag -a distilbert -m "distilbert_qa" 
+    git push origin distilbert 
+    ```
+   
+5. Edit `params.yaml` to use a different model - albert instead of distilbert this time. 
+
+    ``` 
+    model: 
+        path: models/albert
+    ```
+   
+6. Reproduce the run - dvc automatically recognizes that one of the dependencies (`params.yaml`) 
+has changed and will re-run the stage, implementing the changes. 
+
+    `dvc repro evaluate.dvc`
+
+7. Commit and tag the results 
+
+    ``` 
+    git add . && git commit -m "evaluate albert qa"
+    git tag -a albert -m "albert_qa" 
+    git push origin albert
+    ```
+8. Now compare the results! Switch back to the master branch. DVC will search the git branches 
+for those metric files we specified and display the results. 
+
+    ``` 
+    git checkout master 
+    dvc metrics show -T
+    ```
+   
+    ``` 
+    distilbert:
+        results/scores.json: {"f1": 67.87348075352251, "avg_inference_time":  0.38483647589987896 }
+    albert:  
+        results/scores.json: {"f1": 81.7724930324639, "avg_inference_time":  0.8740714052890209 }
+    ```
+    The use of dvc metrics makes it easy to compare models in this experiment. From these results, we can see that
+    the albert model is more accurate, but the distilbert model is twice as fast. Good to know!    
+   
+9. Once you are done with your experiment, merge the branch of the best version back to master.
+Don't delete the experiment branch - it acts as a record of the experiment you ran. 
+
+### Experiment Tips and Tricks 
+* create a different branch for each experiment you intend to run, then use git tags to label each run of your experiment. 
+As always, only modify one independent variable in each experiment. 
+* use a single `params.yaml` file to configure your project, this way you only need to edit one file for each 
+experiment run. 
+
+s
+## Conclusion
+DVC has totally transformed the way I manage data science projects, somehow all without making me change my workflow. I love that I did 
+not have to learn a bunch of fancy new commands, mess around with superfluous GUIs, or struggle setting up external servers. 
+
+These two core features of dvc - data registry and experiments - have been especially useful to me, but there were not many examples of how to 
+use these concepts in practice. I hope this tutorial helps you to better understand the power of dvc and to see how truly simple it can be, 
+even as the complexity of the project increases. 
