@@ -36,11 +36,11 @@ dvc run -f dvc_files/01_example_file_metadata.dvc \
 The `process_example_audio.py` script will look at each individual wav file in the input path and output a json 
 with information about it, for example audio duration and any other metadata that might be available. 
 
-Note: in the above `dvc run` command, I specified that the `metadata` directory is an output of the script that 
+**Note:** in the above `dvc run` command, I specified that the `metadata` directory is an output of the script that 
 should be tracked. Notice that this directory doesn't yet exist - it is created inside the python script. This is because 
 dvc requires that any declared outputs (`-o, --outputs`) are created strictly within the scope of the stage. 
 
-Other Note: I have been storing all my dvc stage files in a folder called `dvc_files` for the sake of cleanliness,
+**Note:** I have been storing all my dvc stage files in a folder called `dvc_files` for the sake of cleanliness,
 but starting with the new release of Version 1.0, dvc stores all stage information in a single file, so this won't be necessary. 
 
 Once we have extracted and stored metadata for each file, we also want to generate some information about the dataset in aggregate. 
@@ -67,7 +67,7 @@ I am still trying to find a way to make this data cataloging process more automa
 I store this information in a json file called `info.json` in the dataset directory and DO NOT use dvc to track this - it gets 
 versioned with git so that anyone on the team can see what's the dataset is all about. 
 
-###2. Get a 500 call sample of the dataset
+### 2. Get a 500 call sample of the dataset
 
 Now that we have our dataset catalogued and versioned with dvc, we can generate the sample we want to transcribe. For this, 
 I have a script called `sample.py` which takes as input a `params.yaml` file which contains the following constraints for the sample: 
@@ -87,8 +87,8 @@ dvc run -f dvc_files/02_sample_example.dvc \
     python code/sample.py --params params.yaml --input raw/audio/calls/example/dataset \
     --output audio/calls/example/sample
 ```
-Note: again, the `sample` directory gets created at runtime. 
-Note: The `-p` flag in `dvc run` indicates the presence of a special dependency, by default stored in a file called `params.yaml`. 
+**Note:** again, the `sample` directory gets created at runtime. 
+**Note:** The `-p` flag in `dvc run` indicates the presence of a special dependency, by default stored in a file called `params.yaml`. 
 If any of the fields under the `audio_sample` section of the yaml file changes, then dvc will detect this and any calls to `dvc repro` will 
 rerun with the updated parameters.
 
@@ -100,7 +100,7 @@ git add . && git commit -m "add example data"
 dvc push
 ```
 
-###3. Import the sample audio to a dvc project for performing ASR. 
+### 3. Import the sample audio to a dvc project for performing ASR. 
 
 Now that all our audio data is tracked and pushed to the cloud, we can use it in any of our other projects. For this example, 
 we move to our git repo for performing transcription and use `dvc import` to pull the sample data into that workspace. 
@@ -111,7 +111,7 @@ dvc import git@sqbu-github.cisco.com:CCBU-CCOne/wccai-dvc-data-registry.git \
 ```
 Using `dvc import` rather than `dvc get` will preserve the string of dependencies which produced this version of the data. 
 
-###4. Process the audio
+### 4. Process the audio
 Once again, we need to process this data so it is in the correct format for the ASR model. For this we 
 use a bash script `preprocess.sh` which asserts the audio is in the correct sample rate/encoding, splits the 
 stereo audio into left and right channels, and stores in 3 separate directories (for the sake of parallel processing).
@@ -124,7 +124,7 @@ dvc run -f dvc_files/01_preprocess_example.dvc \
     bash preprocess.sh audio/raw/sample audio/clean
 ```
 
-###5. Run the ASR
+### 5. Run the ASR
 With our wav files split into left and right channels and stored in 3 directories, it is easy to 
 call the STT API in parallel over the 3 sets of data. We use a bash script, which internally calls 
 a python script, to perform the ASR. Again, the script reads from a `params.yaml` file where we define 
@@ -157,7 +157,7 @@ dvc run -dvc_files/02_transcribe_example.dvc \
     bash transcribe_parallel.sh audio/clean results/raw 
 ```
 
-###6. Process the results
+### 6. Process the results
 Once we get the raw results from the ASR model, we need to do some more processing. Namely, we need to merge 
 the transcripts corresponding to the left and right audio channels, generate a human-readable transcript from that, 
 and then try to identify which of the two speakers is the agent and which is the caller. We do this with 
@@ -189,7 +189,7 @@ git tag -a baseline -m "baseline stt with agent labeling"
 git push origin baseline
 ```
 
-###7. BONUS - iterate and improve 
+### 7. BONUS - iterate and improve 
 Now that we have some human-readable, speaker-separated transcripts, we skim some of them and notice a few things. 
 For example, we see that our regular expression matching only managed to label a few calls with "Agent" and "Caller" but
 but we see that we could expand our regular expression list to cover some more bases. In many of the transcripts, 
@@ -224,7 +224,7 @@ dvc metrics diff
 
 This command will show us that we were able to label 35 more of the transcripts with the new expression! 
 
-###8. Save and Catalog the results 
+### 8. Save and Catalog the results 
 
 We want our transcripts to be available for others on the team to use, so let's add them to the data registry. 
 One way to do this is to simply copy the data to your data registry repo, `dvc add` and then `dvc push` them.
@@ -240,7 +240,7 @@ git add . && git commit -m "setup transcripts remote" && git push
 dvc push dvc_files/03_postprocess_example.dvc 
 ```
 
-Note: this `dvc push` command will only push the OUTPUTS of the specified .dvc stage. To push all artifacts and dependencies,
+**Note:** this `dvc push` command will only push the OUTPUTS of the specified .dvc stage. To push all artifacts and dependencies,
 you can use the `--with-deps` flag. Here, we are only interested in the output transcripts. 
 
 Now, go back to the data registry repo and run: 
@@ -252,7 +252,7 @@ dvc import git@sqbu-github.cisco.com:CCBU-CCOne/wccai-nutcracker-transcription.g
     results/readable/metadata 
 dvc push 
 ```
-Note: make sure you also get the `info.json` file if you made one for the dataset. 
+**Note:** make sure you also get the `info.json` file if you made one for the dataset. 
 
 Now you and your team can use this transcript dataset in any of your other projects. Simply call `dvc update` + the name 
 of the .dvc file to pull in any updates to the dataset which may have occurred upstream. 
