@@ -73,3 +73,12 @@ For my current project, the search space of possible experiments is smaller so f
 
 A: When you call `dvc push`, DVC compares the contents of your local cache with those of your remote storage. 
 It will only copy over data that has changed or is new. 
+
+**Q: Is there a way to modify a dvc run stage file? For example, to change the command syntax, a dependency path, or to add
+an additional output?**
+
+A: Yes! Pipeline stages change, and that's okay. Instead of deleting and rerunning the `dvc run` command, you can 
+manually modify the run stage file (.dvc file or dvc.yaml, depending on the DVC version). If adding an extra output, 
+specify the `path` and leave the `md5` field blank. When you are finished modifying the stage, call `dvc commit` to save the
+changes (and to tell DVC that they were intentional). 
+
